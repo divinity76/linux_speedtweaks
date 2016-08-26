@@ -82,6 +82,10 @@ if (! $simulation && posix_getuid() !== 0) {
                 echo "adding nodatasum.. ";
                 $options[] = 'nodatasum';
             }
+            if (! findParitalStringInArray($options, 'treelog')) {
+                echo "adding notreelog.. ";
+                $options[] = 'notreelog';
+            }
         } else {
             throw new LogicException('unreachable code reached! should never happen...');
         }
