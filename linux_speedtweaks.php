@@ -4,13 +4,14 @@ init ();
 $simulation = ! in_array ( '--no-test', $argv );
 if ($simulation) {
 	echo "Warning, only running a simulation, no actions will be performed. " . PHP_EOL;
-	echo "will create simulation.Fstab, simulation.01-disable-aslr.conf, simulation.grub , etc." . PHP_EOL;
+	echo "will create simulation.Fstab, simulation.01-disable-aslr.conf, simulation.grub, simulation.ld.so.preload, etc." . PHP_EOL;
 	echo 'to actually apply system settings, run "' . $argv [0] . ' --no-test"' . PHP_EOL;
 }
 if (! $simulation && posix_getuid () !== 0) {
 	die ( "error: this script must run as root! but running as uid " . posix_getuid () );
 }
 (function () {
+	// /etc/fstab
 	global $simulation;
 	if (! $simulation && ! is_writable ( '/etc/fstab' )) {
 		die ( 'error: /etc/fstab is not writable!' );
@@ -106,6 +107,7 @@ if (! $simulation && posix_getuid () !== 0) {
 	echo "finished with /etc/fstab." . PHP_EOL;
 }) ();
 (function () {
+	// /etc/sysctl.d/01-disable-aslr.conf
 	global $simulation;
 	if (file_exists ( '/etc/sysctl.d/01-disable-aslr.conf' )) {
 		echo "aslr already disabled, skipping" . PHP_EOL;
@@ -121,6 +123,7 @@ if (! $simulation && posix_getuid () !== 0) {
 	echo 'done.' . PHP_EOL;
 }) ();
 (function () {
+	// /etc/default/grub
 	global $simulation;
 	if (! is_readable ( '/etc/default/grub' )) {
 		echo '/etc/default/grub is not readable, will skip nokaslr.' . PHP_EOL;
@@ -187,7 +190,90 @@ if (! $simulation && posix_getuid () !== 0) {
 	}
 	echo PHP_EOL . 'done.' . PHP_EOL;
 }) ();
-
+(function () {
+	// /etc/ld.so.preload enable global libeatmydata
+	global $simulation;
+	$output = array ();
+	$ret = 0;
+	exec ( 'dpkg --print-foreign-architectures', $output, $ret );
+	if ($ret !== 0) {
+		echo 'dpkg did not return 0. presumably not installed. thus failed to check for multiarch. will not attempt global libeatmydata.' . PHP_EOL;
+		return;
+	}
+	foreach ( $output as $line ) {
+		if (strlen ( trim ( $line ) ) > 0) {
+			echo 'multiarch is enabled. will not attempt global libeatmydata', PHP_EOL;
+			return;
+		}
+	}
+	unset ( $line, $ret, $output );
+	echo "installing eatmydata... ", PHP_EOL;
+	$cmd = 'apt-get -y install eatmydata';
+	if ($simulation) {
+		$cmd .= ' --dry-run';
+	}
+	system ( $cmd );
+	unset ( $cmd );
+	$output = array ();
+	$ret = 0;
+	exec ( 'ldconfig -p | grep libeatmydata', $output, $ret );
+	// WARNING: Technically, several linux filesystems (including btrfs) allows
+	// newlines in filepaths... which would break this code..
+	// but if you put a newline in /usr/lib/x86_64-linux-gnu/libeatmydata.so
+	// then....****YOU
+	// actually, given that both newlines and = and > may be legal in filenames, there's no reliable way to parse the output of ldconfig -p, except the last element
+	if (count ( $output ) < 1) {
+		echo "libeatmydata not found. will not attempt global libeatmydata.", PHP_EOL;
+		return;
+	}
+	$shortest = trim ( $output [0] );
+	foreach ( $output as $line ) {
+		$line = trim ( $line );
+		if (strlen ( $line ) < 1) {
+			continue;
+		}
+		if (strlen ( $line ) < strlen ( $shortest )) {
+			$shortest = $line;
+		}
+	}
+	unset ( $output, $ret, $line );
+	$thepos = strrpos ( $shortest, '=>' );
+	assert ( is_int ( $thepos ) );
+	$line = trim ( substr ( $shortest, $thepos + strlen ( '=>' ) ) );
+	if (! file_exists ( $line )) {
+		echo 'ERROR: detected libeatmydata path as ', $line, ' BUT IT DOES NOT EXIST. will not attempt global libeatmydata, something is very wrong here.', PHP_EOL;
+		return;
+	}
+	unset ( $output, $ret, $shortest, $thepos );
+	echo "detected libeatmydata: ", $line, PHP_EOL;
+	$str = '';
+	if (file_exists ( '/etc/ld.so.preload' )) {
+		if (! is_readable ( '/etc/ld.so.preload' )) {
+			echo '/etc/ld.so.preload does exist, but is not readable, so will not attempt global libeatmydata.', PHP_EOL;
+			return;
+		}
+		$str = file_get_contents ( '/etc/ld.so.preload', false );
+		if (false === $str) {
+			echo "error: failed to read /etc/ld.so.preload. will not attempt global libeatmydata.", PHP_EOL;
+			return;
+		}
+	} else {
+		// /etc/ld.so.preload does not exist.
+	}
+	if (false !== strpos ( $str, 'libeatmydata' )) {
+		echo "libeatmydata is already globally installed.", PHP_EOL;
+		return;
+	}
+	$str .= "\n" . $line;
+	$str = trim ( $str );
+	if ($simulation) {
+		ex::file_put_contents ( 'simulation.ld.so.preload', $str );
+	} else {
+		ex::file_put_contents ( '/etc/ld.so.preload', $str );
+	}
+	echo "libeatmydata globally installed.", PHP_EOL;
+	return;
+}) ();
 echo 'finished. all speedtweaks applied. you should now reboot your computer.' . PHP_EOL;
 if ($simulation) {
 	echo '(not really, this was a simulation)' . PHP_EOL;
