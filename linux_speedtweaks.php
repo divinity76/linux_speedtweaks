@@ -14,9 +14,11 @@ if (! $simulation && posix_getuid () !== 0) {
 	// /etc/fstab
 	global $simulation;
 	if (! $simulation && ! is_writable ( '/etc/fstab' )) {
-		die ( 'error: /etc/fstab is not writable!' );
+		echo 'warning: /etc/fstab is not writable! will not modify filesystem mount parameters.'.PHP_EOL;
+		return false;
 	} elseif ($simulation && ! is_readable ( '/etc/fstab' )) {
-		die ( 'error: /etc/fstab is not readable!' );
+		echo 'warning: /etc/fstab is not readable! will not modify filesystem mount parameters'.PHP_EOL;
+		return false;
 	}
 	echo "fixing /etc/fstab..." . PHP_EOL;
 	$lines = ex::file ( '/etc/fstab', FILE_IGNORE_NEW_LINES );
@@ -106,6 +108,7 @@ if (! $simulation && posix_getuid () !== 0) {
 		ex::file_put_contents ( '/etc/fstab', $data );
 	}
 	echo "finished with /etc/fstab." . PHP_EOL;
+        return true;
 }) ();
 (function () {
 	// /etc/sysctl.d/01-disable-aslr.conf
