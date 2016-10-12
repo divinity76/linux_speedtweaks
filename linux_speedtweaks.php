@@ -10,279 +10,287 @@ if ($simulation) {
 if (! $simulation && posix_getuid () !== 0) {
 	die ( "error: this script must run as root! but running as uid " . posix_getuid () );
 }
-(function () {
-	// /etc/fstab
-	global $simulation;
-	if (! $simulation && ! is_writable ( '/etc/fstab' )) {
-		echo 'warning: /etc/fstab is not writable! will not modify filesystem mount parameters.'.PHP_EOL;
-		return false;
-	} elseif ($simulation && ! is_readable ( '/etc/fstab' )) {
-		echo 'warning: /etc/fstab is not readable! will not modify filesystem mount parameters'.PHP_EOL;
-		return false;
-	}
-	echo "fixing /etc/fstab..." . PHP_EOL;
-	$lines = ex::file ( '/etc/fstab', FILE_IGNORE_NEW_LINES );
-	$lines = trimlines ( $lines );
-	$fooi = 0;
-	foreach ( $lines as $key => $line ) {
-		if (strlen ( $line ) < 1 || $line [0] === '#') {
-			continue;
-		}
-		$matches = [ ];
-		// # <file system> <mount point> <type> <options> <dump> <pass>
-		$one = preg_match ( '/^(?P<filesystem>\S+?)(?P<spaces1>\s+?)(?P<mountpoint>\S+?)(?P<spaces2>\s+?)(?P<type>\S+?)(?P<spaces3>\s+?)(?P<options>\S+?)(?P<spaces4>\s+?)(?P<dump>\S+?)(?P<spaces5>\s+?)(?P<pass>\S+)$/i', $line, $matches );
-		if ($one !== 1) {
-			// var_dump ( 'one', $one, 'matches', $matches, 'key', $key );
-			echo "WARNING: could not understand line " . $key . ".  (invalid format?) ignoring." . PHP_EOL;
-			continue;
-		}
-		// var_dump ( 'matches', $matches );
-		$type = $matches ['type'];
-		$supportedTypes = array (
-				'ext2',
-				'ext3',
-				'ext4',
-				'btrfs'
-		);
-		++ $fooi;
-		if ($fooi !== 1) { // sometimes i just wanna use goto...
-			echo "finished line." . PHP_EOL;
-		}
-		echo 'processing line ' . $key . ': ' . $type . ': ' . $matches ['mountpoint'] . PHP_EOL;
-		if (! findParitalStringInArray ( $supportedTypes, $type )) {
-			echo "ignoring unsupported filesystem type " . $type . ' on line ' . $key . PHP_EOL;
-			continue;
-		}
-		if ($matches ['mountpoint'] === '/boot') {
-			echo 'ignoring /boot on line ' . $key . ' (hardcoded to ignore /boot partition).... ' . PHP_EOL;
-			continue;
-		}
-		$options = explode ( ",", $matches ['options'] );
-		
-		if (! in_array ( 'noatime', $options ) && ! in_array ( 'relatime', $options )) {
-			echo 'adding relatime.. ';
-			$options [] = 'relatime'; // what about lazytime?
-		}
-		if (! findParitalStringInArray ( $options, 'barrier' )) {
-			echo 'adding nobarrier.. ';
-			$options [] = 'nobarrier';
-		}
-		if ($type === 'ext2' || $type === 'ext3' || $type === 'ext4') {
-			if (! findParitalStringInArray ( $options, 'data=' )) {
-				echo 'adding data=writeback.. ';
-				$options [] = 'data=writeback';
-			}
-			if (in_array ( 'journal_checksum', $options ) && ! in_array ( 'journal_async_commit', $options )) {
-				echo 'adding journal_async_commit.. ';
-				$options [] = 'journal_async_commit';
-			}
-		} elseif ($type === 'btrfs') {
-			if (! findParitalStringInArray ( $options, 'compress' )) {
-				echo "adding compress-force=lzo.. ";
-				$options [] = 'compress-force=lzo';
-			}
-			if (! findParitalStringInArray ( $options, 'datasum' ) && ! findParitalStringInArray ( $options, 'datacow' )) {
-				echo "adding nodatasum.. ";
-				$options [] = 'nodatasum';
-			}
-			//notreelog disabled because it may make things slower. see issue #2
-			//if (! findParitalStringInArray ( $options, 'treelog' )) {
-			//	echo "adding notreelog.. ";
-			//	$options [] = 'notreelog';
-			//}
-		} else {
-			throw new LogicException ( 'unreachable code reached! should never happen...' );
-		}
-		$options = implode ( ',', $options );
-		$line = $matches ['filesystem'] . $matches ['spaces1'] . $matches ['mountpoint'] . $matches ['spaces2'] . $matches ['type'] . $matches ['spaces3'] . $options . $matches ['spaces4'] . $matches ['dump'] . $matches ['spaces5'] . $matches ['pass'];
-		// var_dump($line);
-		$lines [$key] = $line;
-	}
-	if ($fooi !== 0) {
-		echo "finished line." . PHP_EOL;
-	}
-	$data = implode ( "\n", $lines );
-	if ($simulation) {
-		ex::file_put_contents ( 'simulation.fstab', $data );
-	} else {
-		ex::file_put_contents ( '/etc/fstab', $data );
-	}
-	echo "finished with /etc/fstab." . PHP_EOL;
-        return true;
-}) ();
-(function () {
-	// /etc/sysctl.d/01-disable-aslr.conf
-	global $simulation;
-	if (file_exists ( '/etc/sysctl.d/01-disable-aslr.conf' )) {
-		echo "aslr already disabled, skipping" . PHP_EOL;
-		return;
-	}
-	echo "disabling ASLR..";
-	$data = 'kernel.randomize_va_space = 0';
-	if ($simulation) {
-		ex::file_put_contents ( 'simulation.01-disable-aslr.conf', $data );
-	} else {
-		ex::file_put_contents ( '/etc/sysctl.d/01-disable-aslr.conf', $data );
-	}
-	echo 'done.' . PHP_EOL;
-}) ();
-(function () {
-	// /etc/default/grub
-	global $simulation;
-	if (! is_readable ( '/etc/default/grub' )) {
-		echo '/etc/default/grub is not readable, will skip nokaslr.' . PHP_EOL;
-		return;
-	}
-	if (! $simulation && ! is_writable ( '/etc/default/grub' )) {
-		echo '/etc/default/grub is not writable, will skip nokaslr.' . PHP_EOL;
-		return;
-	}
-	echo "disabling kaslr...";
-	$lines = ex::file ( '/etc/default/grub', FILE_IGNORE_NEW_LINES );
-	$lines = trimlines ( $lines );
-	$templines = '';
-	foreach ( $lines as $line ) {
-		if (strlen ( $line ) < 1 || $line [0] === '#') {
-			continue;
-		}
-		$templines .= $line . "\n";
-	}
-	if (false !== stripos ( $templines, 'kaslr' )) { // should ignore lines starting with #, like #nokaslr.
-		echo 'custom kaslr settings already detected, skipping.' . PHP_EOL;
-		return;
-	}
-	unset ( $line, $templines );
-	$found = false;
-	foreach ( $lines as $key => $line ) {
-		if (strlen ( $line ) < 1 || $line [0] === '#') {
-			continue;
-		}
-		
-		if (strpos ( $line, 'GRUB_CMDLINE_LINUX_DEFAULT' ) !== 0) {
-			continue;
-		}
-		$found = true;
-		$matches = array ();
-		$one = preg_match ( '/^GRUB_CMDLINE_LINUX_DEFAULT(\s*)\=(\s*)\"(.*)\"$/i', $line, $matches );
-		if ($one !== 1) {
-			// var_dump ( 'one', $one, 'matches', $matches, 'key', $key );
-			echo "WARNING: could not understand line " . $key . ". ignoring. (invalid format?)" . PHP_EOL;
-			continue;
-		}
-		// $options = explode(' ', $matches[3]);//preg_split("\s+",$matches[3]); ?
-		$options = $matches [3];
-		$options .= ' nokaslr';
-		$updatedLine = 'GRUB_CMDLINE_LINUX_DEFAULT' . $matches [1] . '=' . $matches [2] . '"' . $options . '"';
-		// var_dump($updatedLine);
-		$lines [$key] = $updatedLine;
-	}
-	if (! $found) {
-		echo 'error, could not find GRUB_CMDLINE_LINUX_DEFAULT in /etc/default/grub , skipping nokaslr..' . PHP_EOL;
-		return;
-	}
-	$data = implode ( "\n", $lines );
-	if ($simulation) {
-		ex::file_put_contents ( 'simulation.grub', $data );
-	} else {
-		ex::file_put_contents ( '/etc/default/grub', $data );
-	}
-	echo "added nokaslr. running update-grub... " . PHP_EOL;
-	if ($simulation) {
-		echo "(update-grub not executed because this is a simulation..) " . PHP_EOL;
-	} else {
-		system ( "update-grub" );
-	}
-	echo PHP_EOL . 'done.' . PHP_EOL;
-}) ();
-(function () {
-	// /etc/ld.so.preload enable global libeatmydata
-	global $simulation;
-	$output = array ();
-	$ret = 0;
-	exec ( 'dpkg --print-foreign-architectures', $output, $ret );
-	if ($ret !== 0) {
-		echo 'dpkg did not return 0. presumably not installed. thus failed to check for multiarch. will not attempt global libeatmydata.' . PHP_EOL;
-		return;
-	}
-	foreach ( $output as $line ) {
-		if (strlen ( trim ( $line ) ) > 0) {
-			echo 'multiarch is enabled. will not attempt global libeatmydata', PHP_EOL;
-			return;
-		}
-	}
-	unset ( $line, $ret, $output );
-	echo "installing eatmydata... ", PHP_EOL;
-	$cmd = 'apt-get -y install eatmydata';
-	if ($simulation) {
-		$cmd .= ' --dry-run';
-	}
-	system ( $cmd );
-	unset ( $cmd );
-	$output = array ();
-	$ret = 0;
-	exec ( 'ldconfig -p | grep libeatmydata', $output, $ret );
-	// WARNING: Technically, several linux filesystems (including btrfs) allows
-	// newlines in filepaths... which would break this code..
-	// but if you put a newline in /usr/lib/x86_64-linux-gnu/libeatmydata.so
-	// then....****YOU
-	// actually, given that both newlines and = and > may be legal in filenames, there's no reliable way to parse the output of ldconfig -p, except the last element
-	if (count ( $output ) < 1) {
-		echo "libeatmydata not found. will not attempt global libeatmydata.", PHP_EOL;
-		return;
-	}
-	$shortest = trim ( $output [0] );
-	foreach ( $output as $line ) {
-		$line = trim ( $line );
-		if (strlen ( $line ) < 1) {
-			continue;
-		}
-		if (strlen ( $line ) < strlen ( $shortest )) {
-			$shortest = $line;
-		}
-	}
-	unset ( $output, $ret, $line );
-	$thepos = strrpos ( $shortest, '=>' );
-	assert ( is_int ( $thepos ) );
-	$line = trim ( substr ( $shortest, $thepos + strlen ( '=>' ) ) );
-	if (! file_exists ( $line )) {
-		echo 'ERROR: detected libeatmydata path as ', $line, ' BUT IT DOES NOT EXIST. will not attempt global libeatmydata, something is very wrong here.', PHP_EOL;
-		return;
-	}
-	unset ( $output, $ret, $shortest, $thepos );
-	echo "detected libeatmydata: ", $line, PHP_EOL;
-	$str = '';
-	if (file_exists ( '/etc/ld.so.preload' )) {
-		if (! is_readable ( '/etc/ld.so.preload' )) {
-			echo '/etc/ld.so.preload does exist, but is not readable, so will not attempt global libeatmydata.', PHP_EOL;
-			return;
-		}
-		$str = file_get_contents ( '/etc/ld.so.preload', false );
-		if (false === $str) {
-			echo "error: failed to read /etc/ld.so.preload. will not attempt global libeatmydata.", PHP_EOL;
-			return;
-		}
-	} else {
-		// /etc/ld.so.preload does not exist.
-	}
-	if (false !== strpos ( $str, 'libeatmydata' )) {
-		echo "libeatmydata is already globally installed.", PHP_EOL;
-		return;
-	}
-	$str .= "\n" . $line;
-	$str = trim ( $str );
-	if ($simulation) {
-		ex::file_put_contents ( 'simulation.ld.so.preload', $str );
-	} else {
-		ex::file_put_contents ( '/etc/ld.so.preload', $str );
-	}
-	echo "libeatmydata globally installed.", PHP_EOL;
-	return;
-}) ();
+$tweaks = new linux_speedtweaks ();
+$tweaks->DisableASLR ();
+$tweaks->DisableKASLR ();
+$tweaks->EtcFstab ();
+$tweaks->InstallGlobalEatMyData ();
 echo 'finished. all speedtweaks applied. you should now reboot your computer.' . PHP_EOL;
 if ($simulation) {
 	echo '(not really, this was a simulation)' . PHP_EOL;
 }
-die ();
+return;
+class linux_speedtweaks {
+	function EtcFstab() {
+		// /etc/fstab
+		global $simulation;
+		if (! $simulation && ! is_writable ( '/etc/fstab' )) {
+			echo 'warning: /etc/fstab is not writable! will not modify filesystem mount parameters.' . PHP_EOL;
+			return false;
+		} elseif ($simulation && ! is_readable ( '/etc/fstab' )) {
+			echo 'warning: /etc/fstab is not readable! will not modify filesystem mount parameters' . PHP_EOL;
+			return false;
+		}
+		echo "fixing /etc/fstab..." . PHP_EOL;
+		$lines = ex::file ( '/etc/fstab', FILE_IGNORE_NEW_LINES );
+		$lines = trimlines ( $lines );
+		$fooi = 0;
+		foreach ( $lines as $key => $line ) {
+			if (strlen ( $line ) < 1 || $line [0] === '#') {
+				continue;
+			}
+			$matches = [ ];
+			// # <file system> <mount point> <type> <options> <dump> <pass>
+			$one = preg_match ( '/^(?P<filesystem>\S+?)(?P<spaces1>\s+?)(?P<mountpoint>\S+?)(?P<spaces2>\s+?)(?P<type>\S+?)(?P<spaces3>\s+?)(?P<options>\S+?)(?P<spaces4>\s+?)(?P<dump>\S+?)(?P<spaces5>\s+?)(?P<pass>\S+)$/i', $line, $matches );
+			if ($one !== 1) {
+				// var_dump ( 'one', $one, 'matches', $matches, 'key', $key );
+				echo "WARNING: could not understand line " . $key . ".  (invalid format?) ignoring." . PHP_EOL;
+				continue;
+			}
+			// var_dump ( 'matches', $matches );
+			$type = $matches ['type'];
+			$supportedTypes = array (
+					'ext2',
+					'ext3',
+					'ext4',
+					'btrfs'
+			);
+			++ $fooi;
+			if ($fooi !== 1) { // sometimes i just wanna use goto...
+				echo "finished line." . PHP_EOL;
+			}
+			echo 'processing line ' . $key . ': ' . $type . ': ' . $matches ['mountpoint'] . PHP_EOL;
+			if (! findParitalStringInArray ( $supportedTypes, $type )) {
+				echo "ignoring unsupported filesystem type " . $type . ' on line ' . $key . PHP_EOL;
+				continue;
+			}
+			if ($matches ['mountpoint'] === '/boot') {
+				echo 'ignoring /boot on line ' . $key . ' (hardcoded to ignore /boot partition).... ' . PHP_EOL;
+				continue;
+			}
+			$options = explode ( ",", $matches ['options'] );
+
+			if (! in_array ( 'noatime', $options ) && ! in_array ( 'relatime', $options )) {
+				echo 'adding relatime.. ';
+				$options [] = 'relatime'; // what about lazytime?
+			}
+			if (! findParitalStringInArray ( $options, 'barrier' )) {
+				echo 'adding nobarrier.. ';
+				$options [] = 'nobarrier';
+			}
+			if ($type === 'ext2' || $type === 'ext3' || $type === 'ext4') {
+				if (! findParitalStringInArray ( $options, 'data=' )) {
+					echo 'adding data=writeback.. ';
+					$options [] = 'data=writeback';
+				}
+				if (in_array ( 'journal_checksum', $options ) && ! in_array ( 'journal_async_commit', $options )) {
+					echo 'adding journal_async_commit.. ';
+					$options [] = 'journal_async_commit';
+				}
+			} elseif ($type === 'btrfs') {
+				if (! findParitalStringInArray ( $options, 'compress' )) {
+					echo "adding compress-force=lzo.. ";
+					$options [] = 'compress-force=lzo';
+				}
+				if (! findParitalStringInArray ( $options, 'datasum' ) && ! findParitalStringInArray ( $options, 'datacow' )) {
+					echo "adding nodatasum.. ";
+					$options [] = 'nodatasum';
+				}
+				// notreelog disabled because it may make things slower. see issue #2
+				// if (! findParitalStringInArray ( $options, 'treelog' )) {
+				// echo "adding notreelog.. ";
+				// $options [] = 'notreelog';
+				// }
+			} else {
+				throw new LogicException ( 'unreachable code reached! should never happen...' );
+			}
+			$options = implode ( ',', $options );
+			$line = $matches ['filesystem'] . $matches ['spaces1'] . $matches ['mountpoint'] . $matches ['spaces2'] . $matches ['type'] . $matches ['spaces3'] . $options . $matches ['spaces4'] . $matches ['dump'] . $matches ['spaces5'] . $matches ['pass'];
+			// var_dump($line);
+			$lines [$key] = $line;
+		}
+		if ($fooi !== 0) {
+			echo "finished line." . PHP_EOL;
+		}
+		$data = implode ( "\n", $lines );
+		if ($simulation) {
+			ex::file_put_contents ( 'simulation.fstab', $data );
+		} else {
+			ex::file_put_contents ( '/etc/fstab', $data );
+		}
+		echo "finished with /etc/fstab." . PHP_EOL;
+		return true;
+	}
+	function DisableASLR() {
+		// /etc/sysctl.d/01-disable-aslr.conf
+		global $simulation;
+		if (file_exists ( '/etc/sysctl.d/01-disable-aslr.conf' )) {
+			echo "aslr already disabled, skipping" . PHP_EOL;
+			return;
+		}
+		echo "disabling ASLR..";
+		$data = 'kernel.randomize_va_space = 0';
+		if ($simulation) {
+			ex::file_put_contents ( 'simulation.01-disable-aslr.conf', $data );
+		} else {
+			ex::file_put_contents ( '/etc/sysctl.d/01-disable-aslr.conf', $data );
+		}
+		echo 'done.' . PHP_EOL;
+	}
+	function DisableKASLR() {
+		// /etc/default/grub
+		global $simulation;
+		if (! is_readable ( '/etc/default/grub' )) {
+			echo '/etc/default/grub is not readable, will skip nokaslr.' . PHP_EOL;
+			return;
+		}
+		if (! $simulation && ! is_writable ( '/etc/default/grub' )) {
+			echo '/etc/default/grub is not writable, will skip nokaslr.' . PHP_EOL;
+			return;
+		}
+		echo "disabling kaslr...";
+		$lines = ex::file ( '/etc/default/grub', FILE_IGNORE_NEW_LINES );
+		$lines = trimlines ( $lines );
+		$templines = '';
+		foreach ( $lines as $line ) {
+			if (strlen ( $line ) < 1 || $line [0] === '#') {
+				continue;
+			}
+			$templines .= $line . "\n";
+		}
+		if (false !== stripos ( $templines, 'kaslr' )) { // should ignore lines starting with #, like #nokaslr.
+			echo 'custom kaslr settings already detected, skipping.' . PHP_EOL;
+			return;
+		}
+		unset ( $line, $templines );
+		$found = false;
+		foreach ( $lines as $key => $line ) {
+			if (strlen ( $line ) < 1 || $line [0] === '#') {
+				continue;
+			}
+
+			if (strpos ( $line, 'GRUB_CMDLINE_LINUX_DEFAULT' ) !== 0) {
+				continue;
+			}
+			$found = true;
+			$matches = array ();
+			$one = preg_match ( '/^GRUB_CMDLINE_LINUX_DEFAULT(\s*)\=(\s*)\"(.*)\"$/i', $line, $matches );
+			if ($one !== 1) {
+				// var_dump ( 'one', $one, 'matches', $matches, 'key', $key );
+				echo "WARNING: could not understand line " . $key . ". ignoring. (invalid format?)" . PHP_EOL;
+				continue;
+			}
+			// $options = explode(' ', $matches[3]);//preg_split("\s+",$matches[3]); ?
+			$options = $matches [3];
+			$options .= ' nokaslr';
+			$updatedLine = 'GRUB_CMDLINE_LINUX_DEFAULT' . $matches [1] . '=' . $matches [2] . '"' . $options . '"';
+			// var_dump($updatedLine);
+			$lines [$key] = $updatedLine;
+		}
+		if (! $found) {
+			echo 'error, could not find GRUB_CMDLINE_LINUX_DEFAULT in /etc/default/grub , skipping nokaslr..' . PHP_EOL;
+			return;
+		}
+		$data = implode ( "\n", $lines );
+		if ($simulation) {
+			ex::file_put_contents ( 'simulation.grub', $data );
+		} else {
+			ex::file_put_contents ( '/etc/default/grub', $data );
+		}
+		echo "added nokaslr. running update-grub... " . PHP_EOL;
+		if ($simulation) {
+			echo "(update-grub not executed because this is a simulation..) " . PHP_EOL;
+		} else {
+			system ( "update-grub" );
+		}
+		echo PHP_EOL . 'done.' . PHP_EOL;
+	}
+	function InstallGlobalEatMyData() {
+		// /etc/ld.so.preload enable global libeatmydata
+		global $simulation;
+		$output = array ();
+		$ret = 0;
+		exec ( 'dpkg --print-foreign-architectures', $output, $ret );
+		if ($ret !== 0) {
+			echo 'dpkg did not return 0. presumably not installed. thus failed to check for multiarch. will not attempt global libeatmydata.' . PHP_EOL;
+			return;
+		}
+		foreach ( $output as $line ) {
+			if (strlen ( trim ( $line ) ) > 0) {
+				echo 'multiarch is enabled. will not attempt global libeatmydata', PHP_EOL;
+				return;
+			}
+		}
+		unset ( $line, $ret, $output );
+		echo "installing eatmydata... ", PHP_EOL;
+		$cmd = 'apt-get -y install eatmydata';
+		if ($simulation) {
+			$cmd .= ' --dry-run';
+		}
+		system ( $cmd );
+		unset ( $cmd );
+		$output = array ();
+		$ret = 0;
+		exec ( 'ldconfig -p | grep libeatmydata', $output, $ret );
+		// WARNING: Technically, several linux filesystems (including btrfs) allows
+		// newlines in filepaths... which would break this code..
+		// but if you put a newline in /usr/lib/x86_64-linux-gnu/libeatmydata.so
+		// then....****YOU
+		// actually, given that both newlines and = and > may be legal in filenames, there's no reliable way to parse the output of ldconfig -p, except the last element
+		if (count ( $output ) < 1) {
+			echo "libeatmydata not found. will not attempt global libeatmydata.", PHP_EOL;
+			return;
+		}
+		$shortest = trim ( $output [0] );
+		foreach ( $output as $line ) {
+			$line = trim ( $line );
+			if (strlen ( $line ) < 1) {
+				continue;
+			}
+			if (strlen ( $line ) < strlen ( $shortest )) {
+				$shortest = $line;
+			}
+		}
+		unset ( $output, $ret, $line );
+		$thepos = strrpos ( $shortest, '=>' );
+		assert ( is_int ( $thepos ) );
+		$line = trim ( substr ( $shortest, $thepos + strlen ( '=>' ) ) );
+		if (! file_exists ( $line )) {
+			echo 'ERROR: detected libeatmydata path as ', $line, ' BUT IT DOES NOT EXIST. will not attempt global libeatmydata, something is very wrong here.', PHP_EOL;
+			return;
+		}
+		unset ( $output, $ret, $shortest, $thepos );
+		echo "detected libeatmydata: ", $line, PHP_EOL;
+		$str = '';
+		if (file_exists ( '/etc/ld.so.preload' )) {
+			if (! is_readable ( '/etc/ld.so.preload' )) {
+				echo '/etc/ld.so.preload does exist, but is not readable, so will not attempt global libeatmydata.', PHP_EOL;
+				return;
+			}
+			$str = file_get_contents ( '/etc/ld.so.preload', false );
+			if (false === $str) {
+				echo "error: failed to read /etc/ld.so.preload. will not attempt global libeatmydata.", PHP_EOL;
+				return;
+			}
+		} else {
+			// /etc/ld.so.preload does not exist.
+		}
+		if (false !== strpos ( $str, 'libeatmydata' )) {
+			echo "libeatmydata is already globally installed.", PHP_EOL;
+			return;
+		}
+		$str .= "\n" . $line;
+		$str = trim ( $str );
+		if ($simulation) {
+			ex::file_put_contents ( 'simulation.ld.so.preload', $str );
+		} else {
+			ex::file_put_contents ( '/etc/ld.so.preload', $str );
+		}
+		echo "libeatmydata globally installed.", PHP_EOL;
+		return;
+	}
+}
+
 class ex {
 	private static function _return_var_dump(/*...*/){
 		$args = func_get_args ();
@@ -354,4 +362,3 @@ function trimlines(array $lines): array {
 	}
 	return $lines;
 }
-
