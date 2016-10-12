@@ -21,6 +21,21 @@ if ($simulation) {
 }
 return;
 class linux_speedtweaks {
+	private function isSysctrldConfigured(string $config): bool {
+		assert ( is_readable ( '/etc/sysctl.d/' ) );
+		$blacklist = array ();
+		$files = glob ( '/etc/sysctl.d/*.conf' );
+		foreach ( $files as $file ) {
+			if (in_array ( basename ( $file ), $blacklist, true )) {
+				continue; // blacklisted
+			}
+			$file = file_get_contents ( $file );
+			if (false !== strpos ( $file, $config )) {
+				return true;
+			}
+		}
+		return false;
+	}
 	function EtcFstab() {
 		// /etc/fstab
 		global $simulation;
@@ -124,7 +139,7 @@ class linux_speedtweaks {
 	function DisableASLR() {
 		// /etc/sysctl.d/01-disable-aslr.conf
 		global $simulation;
-		if (file_exists ( '/etc/sysctl.d/01-disable-aslr.conf' )) {
+		if ($this->isSysctrldConfigured ( 'kernel.randomize_va_space' )) {
 			echo "aslr already disabled, skipping" . PHP_EOL;
 			return;
 		}
