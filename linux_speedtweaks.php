@@ -15,6 +15,7 @@ $tweaks->DisableASLR ();
 $tweaks->DisableKASLR ();
 $tweaks->EtcFstab ();
 $tweaks->InstallGlobalEatMyData ();
+$tweaks->AdjustVMDirty ();
 echo 'finished. all speedtweaks applied. you should now reboot your computer.' . PHP_EOL;
 if ($simulation) {
 	echo '(not really, this was a simulation)' . PHP_EOL;
@@ -140,7 +141,7 @@ class linux_speedtweaks {
 		// /etc/sysctl.d/01-disable-aslr.conf
 		global $simulation;
 		if ($this->isSysctrldConfigured ( 'kernel.randomize_va_space' )) {
-			echo "aslr already disabled, skipping" . PHP_EOL;
+			echo "custom aslr settings detected, skipping." . PHP_EOL;
 			return;
 		}
 		echo "disabling ASLR..";
@@ -220,6 +221,30 @@ class linux_speedtweaks {
 		}
 		echo PHP_EOL . 'done.' . PHP_EOL;
 	}
+	function AdjustVMDirty() {
+		global $simulation;
+		if (! $this->isSysctrldConfigured ( 'vm.dirty_ratio' )) {
+			echo 'settings vm.dirty_ratio=60' . PHP_EOL;
+			if ($simulation) {
+				ex::file_put_contents ( 'simulation.39-vm-dirty-ratio.conf', 'vm.dirty_ratio=60' );
+			} else {
+				ex::file_put_contents ( '/etc/sysctl.d/39-vm-dirty-ratio.conf', 'vm.dirty_ratio=60' );
+			}
+		} else {
+			echo "custom vm.dirty_ratio settings detected, skipping.." . PHP_EOL;
+		}
+		if (! $this->isSysctrldConfigured ( 'vm.dirty_expire_centisecs' )) {
+			echo 'settings vm.dirty_expire_centisecs=31536000 ( 1 year)' . PHP_EOL;
+			if ($simulation) {
+				ex::file_put_contents ( 'simulation.39-vm-dirty-expire-centisecs.conf', 'vm.dirty_expire_centisecs=31536000' );
+			} else {
+				ex::file_put_contents ( '/etc/sysctl.d/39-vm-dirty-expire-centisecs.conf', 'vm.dirty_expire_centisecs=31536000' );
+			}
+		} else {
+			echo "custom vm.dirty_expire_centisecs settings detected, skipping.." . PHP_EOL;
+		}
+	}
+
 	function InstallGlobalEatMyData() {
 		// /etc/ld.so.preload enable global libeatmydata
 		global $simulation;
