@@ -105,8 +105,8 @@ class linux_speedtweaks {
 				}
 			} elseif ($type === 'btrfs') {
 				if (! findParitalStringInArray ( $options, 'compress' )) {
-					echo "adding compress-force=lzo.. ";
-					$options [] = 'compress-force=lzo';
+					echo "adding compress=lzo.. ";
+					$options [] = 'compress=lzo';
 				}
 				if (! findParitalStringInArray ( $options, 'datasum' ) && ! findParitalStringInArray ( $options, 'datacow' )) {
 					echo "adding nodatasum.. ";
