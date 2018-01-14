@@ -13,6 +13,7 @@ if (! $simulation && posix_getuid () !== 0) {
 $tweaks = new linux_speedtweaks ();
 $tweaks->DisableASLR ();
 $tweaks->DisableKASLR ();
+$tweaks->DisablePTI ();
 $tweaks->EtcFstab ();
 $tweaks->InstallGlobalEatMyData ();
 $tweaks->AdjustVMDirty ();
@@ -69,7 +70,7 @@ class linux_speedtweaks {
 					'ext2',
 					'ext3',
 					'ext4',
-					'btrfs'
+					'btrfs' 
 			);
 			++ $fooi;
 			if ($fooi !== 1) { // sometimes i just wanna use goto...
@@ -85,7 +86,7 @@ class linux_speedtweaks {
 				continue;
 			}
 			$options = explode ( ",", $matches ['options'] );
-
+			
 			if (! in_array ( 'noatime', $options ) && ! in_array ( 'relatime', $options )) {
 				echo 'adding relatime.. ';
 				$options [] = 'relatime'; // what about lazytime?
@@ -184,7 +185,7 @@ class linux_speedtweaks {
 			if (strlen ( $line ) < 1 || $line [0] === '#') {
 				continue;
 			}
-
+			
 			if (strpos ( $line, 'GRUB_CMDLINE_LINUX_DEFAULT' ) !== 0) {
 				continue;
 			}
@@ -221,6 +222,75 @@ class linux_speedtweaks {
 		}
 		echo PHP_EOL . 'done.' . PHP_EOL;
 	}
+	function DisablePTI() {
+		// maintenance note, this is basically just a copy of disableKASLR
+		// /etc/default/grub
+		global $simulation;
+		if (! is_readable ( '/etc/default/grub' )) {
+			echo '/etc/default/grub is not readable, will skip nopti.' . PHP_EOL;
+			return;
+		}
+		if (! $simulation && ! is_writable ( '/etc/default/grub' )) {
+			echo '/etc/default/grub is not writable, will skip nopti.' . PHP_EOL;
+			return;
+		}
+		echo "disabling pti...";
+		$lines = ex::file ( '/etc/default/grub', FILE_IGNORE_NEW_LINES );
+		$lines = trimlines ( $lines );
+		$templines = '';
+		foreach ( $lines as $line ) {
+			if (strlen ( $line ) < 1 || $line [0] === '#') {
+				continue;
+			}
+			$templines .= $line . "\n";
+		}
+		if (false !== stripos ( $templines, 'pti' )) { // should ignore lines starting with #, like #nokaslr.
+			echo 'custom pti settings already detected, skipping.' . PHP_EOL;
+			return;
+		}
+		unset ( $line, $templines );
+		$found = false;
+		foreach ( $lines as $key => $line ) {
+			if (strlen ( $line ) < 1 || $line [0] === '#') {
+				continue;
+			}
+			
+			if (strpos ( $line, 'GRUB_CMDLINE_LINUX_DEFAULT' ) !== 0) {
+				continue;
+			}
+			$found = true;
+			$matches = array ();
+			$one = preg_match ( '/^GRUB_CMDLINE_LINUX_DEFAULT(\s*)\=(\s*)\"(.*)\"$/i', $line, $matches );
+			if ($one !== 1) {
+				// var_dump ( 'one', $one, 'matches', $matches, 'key', $key );
+				echo "WARNING: could not understand line " . $key . ". ignoring. (invalid format?)" . PHP_EOL;
+				continue;
+			}
+			// $options = explode(' ', $matches[3]);//preg_split("\s+",$matches[3]); ?
+			$options = $matches [3];
+			$options .= ' nopti';
+			$updatedLine = 'GRUB_CMDLINE_LINUX_DEFAULT' . $matches [1] . '=' . $matches [2] . '"' . $options . '"';
+			// var_dump($updatedLine);
+			$lines [$key] = $updatedLine;
+		}
+		if (! $found) {
+			echo 'error, could not find GRUB_CMDLINE_LINUX_DEFAULT in /etc/default/grub , skipping nopti..' . PHP_EOL;
+			return;
+		}
+		$data = implode ( "\n", $lines );
+		if ($simulation) {
+			ex::file_put_contents ( 'simulation.grub.PTI.TODO.FIXME', $data );
+		} else {
+			ex::file_put_contents ( '/etc/default/grub', $data );
+		}
+		echo "added nopti. running update-grub... " . PHP_EOL;
+		if ($simulation) {
+			echo "(update-grub not executed because this is a simulation..) " . PHP_EOL;
+		} else {
+			system ( "update-grub" );
+		}
+		echo PHP_EOL . 'done.' . PHP_EOL;
+	}
 	function AdjustVMDirty() {
 		global $simulation;
 		if (! $this->isSysctrldConfigured ( 'vm.dirty_ratio' )) {
@@ -244,7 +314,6 @@ class linux_speedtweaks {
 			echo "custom vm.dirty_expire_centisecs settings detected, skipping.." . PHP_EOL;
 		}
 	}
-
 	function InstallGlobalEatMyData() {
 		// /etc/ld.so.preload enable global libeatmydata
 		global $simulation;
@@ -330,7 +399,6 @@ class linux_speedtweaks {
 		return;
 	}
 }
-
 class ex {
 	private static function _return_var_dump(/*...*/){
 		$args = func_get_args ();
