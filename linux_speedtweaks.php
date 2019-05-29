@@ -8,15 +8,15 @@ if ($simulation) {
 	echo 'to actually apply system settings, run "' . $argv[0] . ' --no-test"' . PHP_EOL;
 }
 if (!$simulation && posix_getuid() !== 0) {
-	die("error: this script must run as root! but running as uid " . posix_getuid());
+	die("err<r: this script must run as root! but running as uid " . posix_getuid());
 }
 $tweaks = new linux_speedtweaks();
-$tweaks->DisableASLR();
-$tweaks->DisableKASLR();
-$tweaks->DisablePTI();
-$tweaks->EtcFstab();
-$tweaks->InstallGlobalEatMyData();
-$tweaks->AdjustVMDirty();
+$tweaks->disable_ASLR();
+$tweaks->disable_KASLR();
+$tweaks->dibale_PTI();
+$tweaks->filesystem_tweaks_etc_fstab();
+$tweaks->Install_global_eat_my_data();
+$tweaks->adjust_vm_dirty();
 echo 'finished. all speedtweaks applied. you should now reboot your computer.' . PHP_EOL;
 if ($simulation) {
 	echo '(not really, this was a simulation)' . PHP_EOL;
@@ -24,7 +24,7 @@ if ($simulation) {
 return;
 class linux_speedtweaks
 {
-	private function isSysctrldConfigured(string $config): bool
+	private function is_sysctld_configured(string $config): bool
 	{
 		assert(is_readable('/etc/sysctl.d/'));
 		$blacklist = array();
@@ -40,7 +40,7 @@ class linux_speedtweaks
 		}
 		return false;
 	}
-	function EtcFstab()
+	public function filesystem_tweaks_etc_fstab()
 	{
 		// /etc/fstab
 		global $simulation;
@@ -141,11 +141,11 @@ class linux_speedtweaks
 		echo "finished with /etc/fstab." . PHP_EOL;
 		return true;
 	}
-	function DisableASLR()
+	public function disable_ASLR()
 	{
 		// /etc/sysctl.d/01-disable-aslr.conf
 		global $simulation;
-		if ($this->isSysctrldConfigured('kernel.randomize_va_space')) {
+		if ($this->is_sysctld_configured('kernel.randomize_va_space')) {
 			echo "custom aslr settings detected, skipping." . PHP_EOL;
 			return;
 		}
@@ -158,7 +158,7 @@ class linux_speedtweaks
 		}
 		echo 'done.' . PHP_EOL;
 	}
-	function DisableKASLR()
+	public function disable_KASLR()
 	{
 		// /etc/default/grub
 		global $simulation;
@@ -227,7 +227,7 @@ class linux_speedtweaks
 		}
 		echo PHP_EOL . 'done.' . PHP_EOL;
 	}
-	function DisablePTI()
+	public function dibale_PTI()
 	{
 		// maintenance note, this is basically just a copy of disableKASLR
 		// /etc/default/grub
@@ -297,10 +297,10 @@ class linux_speedtweaks
 		}
 		echo PHP_EOL . 'done.' . PHP_EOL;
 	}
-	function AdjustVMDirty()
+	public function adjust_vm_dirty()
 	{
 		global $simulation;
-		if (!$this->isSysctrldConfigured('vm.dirty_ratio')) {
+		if (!$this->is_sysctld_configured('vm.dirty_ratio')) {
 			echo 'settings vm.dirty_ratio=60' . PHP_EOL;
 			if ($simulation) {
 				ex::file_put_contents('simulation.39-vm-dirty-ratio.conf', 'vm.dirty_ratio=60');
@@ -310,7 +310,7 @@ class linux_speedtweaks
 		} else {
 			echo "custom vm.dirty_ratio settings detected, skipping.." . PHP_EOL;
 		}
-		if (!$this->isSysctrldConfigured('vm.dirty_expire_centisecs')) {
+		if (!$this->is_sysctld_configured('vm.dirty_expire_centisecs')) {
 			echo 'settings vm.dirty_expire_centisecs=31536000 ( 1 year)' . PHP_EOL;
 			if ($simulation) {
 				ex::file_put_contents('simulation.39-vm-dirty-expire-centisecs.conf', 'vm.dirty_expire_centisecs=31536000');
@@ -321,7 +321,7 @@ class linux_speedtweaks
 			echo "custom vm.dirty_expire_centisecs settings detected, skipping.." . PHP_EOL;
 		}
 	}
-	function InstallGlobalEatMyData()
+	public function Install_global_eat_my_data()
 	{
 		// /etc/ld.so.preload enable global libeatmydata
 		global $simulation;
