@@ -154,6 +154,7 @@ class linux_speedtweaks
 	public function disable_l1tf_mitigations()
 	{
 		$this->add_kernel_boot_parameter("kvm-intel.vmentry_l1d_flush=never");
+		$this->add_kernel_boot_parameter("l1tf=off");
 	}
 	public function disable_ASLR()
 	{
