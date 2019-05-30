@@ -100,6 +100,12 @@ class linux_speedtweaks
 					}
 				}
 			} elseif ($type === 'btrfs') {
+				if (!findParitalStringInArray($options, 'flushoncommit')) {
+					if ($this->is_filesystem_mount_option_supported($type, 'noflushoncommit')) {
+						echo "adding noflushoncommit.. ";
+						$options[] = 'noflushoncommit';
+					}
+				}
 				if (!findParitalStringInArray($options, 'compress')) {
 					if ($this->is_filesystem_mount_option_supported($type, 'compress=lzo')) {
 						echo "adding compress=lzo.. ";
@@ -137,6 +143,7 @@ class linux_speedtweaks
 		echo "finished with /etc/fstab." . PHP_EOL;
 		return true;
 	}
+
 	public function disable_ASLR()
 	{
 		// /etc/sysctl.d/01-disable-aslr.conf
