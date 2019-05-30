@@ -17,6 +17,7 @@ $tweaks->disable_PTI();
 $tweaks->filesystem_tweaks_etc_fstab();
 $tweaks->Install_global_eat_my_data();
 $tweaks->disable_l1tf_mitigations();
+$tweaks->misc_kernel_options(); //cba coming up with the names for all this stuff
 $tweaks->adjust_vm_dirty();
 echo 'finished. all speedtweaks applied. you should now reboot your computer.' . PHP_EOL;
 if ($simulation) {
@@ -25,6 +26,10 @@ if ($simulation) {
 return;
 class linux_speedtweaks
 {
+	public function misc_kernel_options(){
+		//cba coming up with the names for all this stuff
+		$this->add_kernel_boot_parameter("noretpotline");
+	}
 	public function filesystem_tweaks_etc_fstab()
 	{
 		// /etc/fstab
