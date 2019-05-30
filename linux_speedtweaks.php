@@ -16,6 +16,7 @@ $tweaks->disable_KASLR();
 $tweaks->disable_PTI();
 $tweaks->filesystem_tweaks_etc_fstab();
 $tweaks->Install_global_eat_my_data();
+$tweaks->disable_l1tf_mitigations();
 $tweaks->adjust_vm_dirty();
 echo 'finished. all speedtweaks applied. you should now reboot your computer.' . PHP_EOL;
 if ($simulation) {
@@ -150,7 +151,10 @@ class linux_speedtweaks
 		echo "finished with /etc/fstab." . PHP_EOL;
 		return true;
 	}
-
+	public function disable_l1tf_mitigations()
+	{
+		$this->add_kernel_boot_parameter("kvm-intel.vmentry_l1d_flush=never");
+	}
 	public function disable_ASLR()
 	{
 		// /etc/sysctl.d/01-disable-aslr.conf
