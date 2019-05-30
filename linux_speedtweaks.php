@@ -102,12 +102,12 @@ class linux_speedtweaks
 				}
 			}
 			if ($type === 'ext2' || $type === 'ext3' || $type === 'ext4') {
-				if (!findParitalStringInArray($options, 'data=')) {
-					if ($this->is_filesystem_mount_option_supported($type, 'data=writeback')) {
-						echo 'adding data=writeback.. ';
-						$options[] = 'data=writeback';
-					}
-				}
+				// if (!findParitalStringInArray($options, 'data=')) {
+				// 	if ($this->is_filesystem_mount_option_supported($type, 'data=writeback')) {
+				// 		echo 'adding data=writeback.. ';
+				// 		$options[] = 'data=writeback';
+				// 	}
+				// }
 
 				if (!findParitalStringInArray($options, 'auto_da_alloc')) {
 					if ($this->is_filesystem_mount_option_supported($type, 'noauto_da_alloc')) {
