@@ -33,6 +33,8 @@ class linux_speedtweaks
 		$this->add_kernel_boot_parameter("noibpb");
 		$this->add_kernel_boot_parameter("nospectre_v2");
 		$this->add_kernel_boot_parameter("nospectre_v1");
+		$this->add_kernel_boot_parameter("nospec_store_bypass_disable");
+
 
 
 	}
