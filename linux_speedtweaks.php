@@ -26,20 +26,18 @@ if ($simulation) {
 return;
 class linux_speedtweaks
 {
-	public function misc_kernel_options(){
+	public function misc_kernel_options()
+	{
 		//cba coming up with the names for all this stuff
 		$this->add_kernel_boot_parameter("noretpotline");
 		$this->add_kernel_boot_parameter("noibrs"); // no restricted indirect branch speculation
-		$this->add_kernel_boot_parameter("noibpb");// no indirect branch prediction barrier
+		$this->add_kernel_boot_parameter("noibpb"); // no indirect branch prediction barrier
 		$this->add_kernel_boot_parameter("nospectre_v2");
 		$this->add_kernel_boot_parameter("nospectre_v1");
 		$this->add_kernel_boot_parameter("nospec_store_bypass_disable");
 		$this->add_kernel_boot_parameter("no_stf_barrier");
 		$this->add_kernel_boot_parameter("mds=off");
-		$this->add_kernel_boot_parameter("mitigations=off");		
-
-
-
+		$this->add_kernel_boot_parameter("mitigations=off");
 	}
 	public function filesystem_tweaks_etc_fstab()
 	{
@@ -406,6 +404,10 @@ class linux_speedtweaks
 		static $cache = array();
 		if (isset($cache[$filesystem][$option])) {
 			return $cache[$filesystem][$option];
+		}
+		$blacklist = ['data=writeback'];
+		if (in_array($option, $blacklist, true)) {
+			return false;
 		}
 		echo "checking if filesystem \"{$filesystem}\" support option \"\{$option}\"..";
 		// btrfs is a bitch and needs over 100MB even for an empty partition...
