@@ -211,11 +211,11 @@ class linux_speedtweaks
 			echo "custom vm.dirty_ratio settings detected, skipping.." . PHP_EOL;
 		}
 		if (!$this->is_sysctld_configured('vm.dirty_expire_centisecs')) {
-			echo 'settings vm.dirty_expire_centisecs=31536000 ( 1 year)' . PHP_EOL;
+			echo 'settings vm.dirty_expire_centisecs=3000 ( 30 seconds )' . PHP_EOL;
 			if ($simulation) {
-				ex::file_put_contents('simulation.39-vm-dirty-expire-centisecs.conf', 'vm.dirty_expire_centisecs=31536000');
+				ex::file_put_contents('simulation.39-vm-dirty-expire-centisecs.conf', 'vm.dirty_expire_centisecs=3000');
 			} else {
-				ex::file_put_contents('/etc/sysctl.d/39-vm-dirty-expire-centisecs.conf', 'vm.dirty_expire_centisecs=31536000');
+				ex::file_put_contents('/etc/sysctl.d/39-vm-dirty-expire-centisecs.conf', 'vm.dirty_expire_centisecs=3000');
 			}
 		} else {
 			echo "custom vm.dirty_expire_centisecs settings detected, skipping.." . PHP_EOL;
