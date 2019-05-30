@@ -29,6 +29,7 @@ class linux_speedtweaks
 	public function misc_kernel_options(){
 		//cba coming up with the names for all this stuff
 		$this->add_kernel_boot_parameter("noretpotline");
+		$this->add_kernel_boot_parameter("noibrs");
 	}
 	public function filesystem_tweaks_etc_fstab()
 	{
