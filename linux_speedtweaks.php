@@ -31,6 +31,8 @@ class linux_speedtweaks
 		$this->add_kernel_boot_parameter("noretpotline");
 		$this->add_kernel_boot_parameter("noibrs");
 		$this->add_kernel_boot_parameter("noibpb");
+		$this->add_kernel_boot_parameter("nospectre_v2");
+
 
 	}
 	public function filesystem_tweaks_etc_fstab()
