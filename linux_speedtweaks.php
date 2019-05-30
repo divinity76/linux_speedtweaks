@@ -93,6 +93,13 @@ class linux_speedtweaks
 						$options[] = 'data=writeback';
 					}
 				}
+
+				if (!findParitalStringInArray($options, 'auto_da_alloc')) {
+					if ($this->is_filesystem_mount_option_supported($type, 'noauto_da_alloc')) {
+						echo 'adding noauto_da_alloc.. ';
+						$options[] = 'noauto_da_alloc';
+					}
+				}
 				if (in_array('journal_checksum', $options) && !in_array('journal_async_commit', $options)) {
 					if ($this->is_filesystem_mount_option_supported($type, 'journal_checksum,journal_async_commit')) {
 						echo 'adding journal_async_commit.. ';
