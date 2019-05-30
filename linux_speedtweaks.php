@@ -13,7 +13,7 @@ if (!$simulation && posix_getuid() !== 0) {
 $tweaks = new linux_speedtweaks();
 $tweaks->disable_ASLR();
 $tweaks->disable_KASLR();
-$tweaks->dibale_PTI();
+$tweaks->disable_PTI();
 $tweaks->filesystem_tweaks_etc_fstab();
 $tweaks->Install_global_eat_my_data();
 $tweaks->adjust_vm_dirty();
@@ -24,22 +24,6 @@ if ($simulation) {
 return;
 class linux_speedtweaks
 {
-	private function is_sysctld_configured(string $config): bool
-	{
-		assert(is_readable('/etc/sysctl.d/'));
-		$blacklist = array();
-		$files = glob('/etc/sysctl.d/*.conf');
-		foreach ($files as $file) {
-			if (in_array(basename($file), $blacklist, true)) {
-				continue; // blacklisted
-			}
-			$file = file_get_contents($file);
-			if (false !== strpos($file, $config)) {
-				return true;
-			}
-		}
-		return false;
-	}
 	public function filesystem_tweaks_etc_fstab()
 	{
 		// /etc/fstab
@@ -91,30 +75,42 @@ class linux_speedtweaks
 			$options = explode(",", $matches['options']);
 
 			if (!in_array('noatime', $options) && !in_array('relatime', $options)) {
-				echo 'adding relatime.. ';
-				$options[] = 'relatime'; // what about lazytime?
+				if ($this->is_filesystem_mount_option_supported($type, 'relatime')) {
+					echo 'adding relatime.. ';
+					$options[] = 'relatime'; // what about lazytime?
+				}
 			}
 			if (!findParitalStringInArray($options, 'barrier')) {
-				echo 'adding nobarrier.. ';
-				$options[] = 'nobarrier';
+				if ($this->is_filesystem_mount_option_supported($type, 'nobarrier')) {
+					echo 'adding nobarrier.. ';
+					$options[] = 'nobarrier';
+				}
 			}
 			if ($type === 'ext2' || $type === 'ext3' || $type === 'ext4') {
 				if (!findParitalStringInArray($options, 'data=')) {
-					echo 'adding data=writeback.. ';
-					$options[] = 'data=writeback';
+					if ($this->is_filesystem_mount_option_supported($type, 'data=writeback')) {
+						echo 'adding data=writeback.. ';
+						$options[] = 'data=writeback';
+					}
 				}
 				if (in_array('journal_checksum', $options) && !in_array('journal_async_commit', $options)) {
-					echo 'adding journal_async_commit.. ';
-					$options[] = 'journal_async_commit';
+					if ($this->is_filesystem_mount_option_supported($type, 'journal_checksum,journal_async_commit')) {
+						echo 'adding journal_async_commit.. ';
+						$options[] = 'journal_async_commit';
+					}
 				}
 			} elseif ($type === 'btrfs') {
 				if (!findParitalStringInArray($options, 'compress')) {
-					echo "adding compress=lzo.. ";
-					$options[] = 'compress=lzo';
+					if ($this->is_filesystem_mount_option_supported($type, 'compress=lzo')) {
+						echo "adding compress=lzo.. ";
+						$options[] = 'compress=lzo';
+					}
 				}
 				if (!findParitalStringInArray($options, 'datasum') && !findParitalStringInArray($options, 'datacow')) {
-					echo "adding nodatasum.. ";
-					$options[] = 'nodatasum';
+					if ($this->is_filesystem_mount_option_supported($type, 'nodatasum')) {
+						echo "adding nodatasum.. ";
+						$options[] = 'nodatasum';
+					}
 				}
 				// notreelog disabled because it may make things slower. see issue #2
 				// if (! findParitalStringInArray ( $options, 'treelog' )) {
@@ -160,142 +156,13 @@ class linux_speedtweaks
 	}
 	public function disable_KASLR()
 	{
-		// /etc/default/grub
-		global $simulation;
-		if (!is_readable('/etc/default/grub')) {
-			echo '/etc/default/grub is not readable, will skip nokaslr.' . PHP_EOL;
-			return;
-		}
-		if (!$simulation && !is_writable('/etc/default/grub')) {
-			echo '/etc/default/grub is not writable, will skip nokaslr.' . PHP_EOL;
-			return;
-		}
 		echo "disabling kaslr...";
-		$lines = ex::file('/etc/default/grub', FILE_IGNORE_NEW_LINES);
-		$lines = trimlines($lines);
-		$templines = '';
-		foreach ($lines as $line) {
-			if (strlen($line) < 1 || $line[0] === '#') {
-				continue;
-			}
-			$templines .= $line . "\n";
-		}
-		if (false !== stripos($templines, 'kaslr')) { // should ignore lines starting with #, like #nokaslr.
-			echo 'custom kaslr settings already detected, skipping.' . PHP_EOL;
-			return;
-		}
-		unset($line, $templines);
-		$found = false;
-		foreach ($lines as $key => $line) {
-			if (strlen($line) < 1 || $line[0] === '#') {
-				continue;
-			}
-
-			if (strpos($line, 'GRUB_CMDLINE_LINUX_DEFAULT') !== 0) {
-				continue;
-			}
-			$found = true;
-			$matches = array();
-			$one = preg_match('/^GRUB_CMDLINE_LINUX_DEFAULT(\s*)\=(\s*)\"(.*)\"$/i', $line, $matches);
-			if ($one !== 1) {
-				// var_dump ( 'one', $one, 'matches', $matches, 'key', $key );
-				echo "WARNING: could not understand line " . $key . ". ignoring. (invalid format?)" . PHP_EOL;
-				continue;
-			}
-			// $options = explode(' ', $matches[3]);//preg_split("\s+",$matches[3]); ?
-			$options = $matches[3];
-			$options .= ' nokaslr';
-			$updatedLine = 'GRUB_CMDLINE_LINUX_DEFAULT' . $matches[1] . '=' . $matches[2] . '"' . $options . '"';
-			// var_dump($updatedLine);
-			$lines[$key] = $updatedLine;
-		}
-		if (!$found) {
-			echo 'error, could not find GRUB_CMDLINE_LINUX_DEFAULT in /etc/default/grub , skipping nokaslr..' . PHP_EOL;
-			return;
-		}
-		$data = implode("\n", $lines);
-		if ($simulation) {
-			ex::file_put_contents('simulation.grub', $data);
-		} else {
-			ex::file_put_contents('/etc/default/grub', $data);
-		}
-		echo "added nokaslr. running update-grub... " . PHP_EOL;
-		if ($simulation) {
-			echo "(update-grub not executed because this is a simulation..) " . PHP_EOL;
-		} else {
-			system("update-grub");
-		}
-		echo PHP_EOL . 'done.' . PHP_EOL;
+		$this->add_kernel_boot_parameter("nokaslr");
 	}
-	public function dibale_PTI()
+	public function disable_PTI()
 	{
-		// maintenance note, this is basically just a copy of disableKASLR
-		// /etc/default/grub
-		global $simulation;
-		if (!is_readable('/etc/default/grub')) {
-			echo '/etc/default/grub is not readable, will skip nopti.' . PHP_EOL;
-			return;
-		}
-		if (!$simulation && !is_writable('/etc/default/grub')) {
-			echo '/etc/default/grub is not writable, will skip nopti.' . PHP_EOL;
-			return;
-		}
 		echo "disabling pti...";
-		$lines = ex::file('/etc/default/grub', FILE_IGNORE_NEW_LINES);
-		$lines = trimlines($lines);
-		$templines = '';
-		foreach ($lines as $line) {
-			if (strlen($line) < 1 || $line[0] === '#') {
-				continue;
-			}
-			$templines .= $line . "\n";
-		}
-		if (false !== stripos($templines, 'pti')) { // should ignore lines starting with #, like #nokaslr.
-			echo 'custom pti settings already detected, skipping.' . PHP_EOL;
-			return;
-		}
-		unset($line, $templines);
-		$found = false;
-		foreach ($lines as $key => $line) {
-			if (strlen($line) < 1 || $line[0] === '#') {
-				continue;
-			}
-
-			if (strpos($line, 'GRUB_CMDLINE_LINUX_DEFAULT') !== 0) {
-				continue;
-			}
-			$found = true;
-			$matches = array();
-			$one = preg_match('/^GRUB_CMDLINE_LINUX_DEFAULT(\s*)\=(\s*)\"(.*)\"$/i', $line, $matches);
-			if ($one !== 1) {
-				// var_dump ( 'one', $one, 'matches', $matches, 'key', $key );
-				echo "WARNING: could not understand line " . $key . ". ignoring. (invalid format?)" . PHP_EOL;
-				continue;
-			}
-			// $options = explode(' ', $matches[3]);//preg_split("\s+",$matches[3]); ?
-			$options = $matches[3];
-			$options .= ' nopti';
-			$updatedLine = 'GRUB_CMDLINE_LINUX_DEFAULT' . $matches[1] . '=' . $matches[2] . '"' . $options . '"';
-			// var_dump($updatedLine);
-			$lines[$key] = $updatedLine;
-		}
-		if (!$found) {
-			echo 'error, could not find GRUB_CMDLINE_LINUX_DEFAULT in /etc/default/grub , skipping nopti..' . PHP_EOL;
-			return;
-		}
-		$data = implode("\n", $lines);
-		if ($simulation) {
-			ex::file_put_contents('simulation.grub.PTI.TODO.FIXME', $data);
-		} else {
-			ex::file_put_contents('/etc/default/grub', $data);
-		}
-		echo "added nopti. running update-grub... " . PHP_EOL;
-		if ($simulation) {
-			echo "(update-grub not executed because this is a simulation..) " . PHP_EOL;
-		} else {
-			system("update-grub");
-		}
-		echo PHP_EOL . 'done.' . PHP_EOL;
+		$this->add_kernel_boot_parameter("nopti");
 	}
 	public function adjust_vm_dirty()
 	{
@@ -406,10 +273,153 @@ class linux_speedtweaks
 		echo "libeatmydata globally installed.", PHP_EOL;
 		return;
 	}
+	private function is_sysctld_configured(string $config): bool
+	{
+		assert(is_readable('/etc/sysctl.d/'));
+		$blacklist = array();
+		$files = glob('/etc/sysctl.d/*.conf');
+		foreach ($files as $file) {
+			if (in_array(basename($file), $blacklist, true)) {
+				continue; // blacklisted
+			}
+			$file = file_get_contents($file);
+			if (false !== strpos($file, $config)) {
+				return true;
+			}
+		}
+		return false;
+	}
+	private function add_kernel_boot_parameter(string $boot_parameter): bool
+	{
+		// /etc/default/grub
+		global $simulation;
+		$boot_parameter_name = trim(strtr($boot_parameter, array('no' => '', '=0' => '', '=1' => '')));
+		if (!is_readable('/etc/default/grub')) {
+			echo '/etc/default/grub is not readable, will skip kernel boot parameter "' . $boot_parameter . '".' . PHP_EOL;
+			return false;
+		}
+		if (!$simulation && !is_writable('/etc/default/grub')) {
+			echo '/etc/default/grub is not writable, will skip kernel boot parameter "' . $boot_parameter . '".' . PHP_EOL;
+			return false;
+		}
+		$file = null;
+		if ($simulation && is_readable('simulation.etc.default.grub')) {
+			$file = "simulation.etc.default.grub";
+		} else {
+			$file = '/etc/default/grub';
+		}
+		echo "adding kernel boot parameter {$boot_parameter}...";
+		$lines = ex::file($file, FILE_IGNORE_NEW_LINES);
+		$lines = trimlines($lines);
+		$templines = '';
+		foreach ($lines as $line) {
+			if (strlen($line) < 1 || $line[0] === '#') {
+				continue;
+			}
+			$templines .= $line . "\n";
+		}
+		if (false !== stripos($templines, $boot_parameter_name)) {
+			echo 'custom ' . $boot_parameter_name . ' settings already detected, skipping.' . PHP_EOL;
+			return false;
+		}
+		unset($line, $templines);
+		$found = false;
+		foreach ($lines as $key => $line) {
+			if (strlen($line) < 1 || $line[0] === '#') {
+				continue;
+			}
+
+			if (strpos($line, 'GRUB_CMDLINE_LINUX_DEFAULT') !== 0) {
+				continue;
+			}
+			$found = true;
+			$matches = array();
+			$one = preg_match('/^GRUB_CMDLINE_LINUX_DEFAULT(\s*)\=(\s*)\"(.*)\"$/i', $line, $matches);
+			if ($one !== 1) {
+				// var_dump ( 'one', $one, 'matches', $matches, 'key', $key );
+				echo "WARNING: could not understand line " . $key . ". ignoring. (invalid format?)" . PHP_EOL;
+				continue;
+			}
+			// $options = explode(' ', $matches[3]);//preg_split("\s+",$matches[3]); ?
+			$options = $matches[3];
+			$options .= ' ' . $boot_parameter;
+			$updatedLine = 'GRUB_CMDLINE_LINUX_DEFAULT' . $matches[1] . '=' . $matches[2] . '"' . $options . '"';
+			// var_dump($updatedLine);
+			$lines[$key] = $updatedLine;
+		}
+		if (!$found) {
+			echo 'error, could not find GRUB_CMDLINE_LINUX_DEFAULT in /etc/default/grub , skipping ' . $boot_parameter . '..' . PHP_EOL;
+			return false;
+		}
+		$data = implode("\n", $lines);
+		if ($simulation) {
+			ex::file_put_contents('simulation.etc.default.grub', $data);
+		} else {
+			ex::file_put_contents('/etc/default/grub', $data);
+		}
+		echo "added {$boot_parameter}. running update-grub... " . PHP_EOL;
+		if ($simulation) {
+			echo "(update-grub not executed because this is a simulation..) " . PHP_EOL;
+		} else {
+			system("update-grub");
+		}
+		echo PHP_EOL . 'done.' . PHP_EOL;
+		return true;
+	}
+	private function is_filesystem_mount_option_supported(string $filesystem, string $option): bool
+	{
+		static $cache = array();
+		if (isset($cache[$filesystem][$option])) {
+			return $cache[$filesystem][$option];
+		}
+		echo "checking if filesystem \"{$filesystem}\" support option \"\{$option}\"..";
+		// btrfs is a bitch and needs over 100MB even for an empty partition...
+		$size = (50000000 * 4) - 1;
+		$tmpdiskh = tmpfile();
+		fseek($tmpdiskh, $size - 1);
+		fwrite($tmpdiskh, "\x00", 1);
+		rewind($tmpdiskh);
+		$tmpdisk = stream_get_meta_data($tmpdiskh)['uri'];
+		$tmpdiskname = basename($tmpdisk);
+		passthru("mkfs.{$filesystem} " . escapeshellarg($tmpdisk), $ret);
+		if ($ret !== 0) {
+			$ret = false;
+			echo "warning, could not create test filesystem! hence cannot test mount option.\n";
+		} else {
+			mkdir($tmpdiskname);
+			passthru("mount " . escapeshellarg($tmpdisk) . " " . escapeshellarg(realpath($tmpdiskname)), $ret);
+			if ($ret !== 0) {
+				$ret = false;
+				echo "warning, could not mount filesystem at all (even with no special options)\n";
+				rmdir($tmpdiskname);
+			} else {
+				passthru("umount " . escapeshellarg(realpath($tmpdiskname)), $ret);
+				assert($ret === 0);
+				$cmd = implode(" ", array(
+					'mount',
+					'-o ' . escapeshellarg($option),
+					escapeshellarg($tmpdisk),
+					escapeshellarg(realpath($tmpdiskname))
+				));
+				passthru($cmd, $ret);
+				if ($ret === 0) {
+					$ret = true; // final
+					passthru("umount " . escapeshellarg(realpath($tmpdiskname)), $ret2);
+					assert($ret2 === 0);
+				} else {
+					$ret = false; // final
+				}
+				rmdir($tmpdiskname);
+			}
+		}
+		$cache[$filesystem][$option] = $ret;
+		fclose($tmpdiskh);
+		return $ret;
+	}
 }
 class ex
 {
-	private static function _return_var_dump( )
+	private static function _return_var_dump()
 	{
 		$args = func_get_args();
 		ob_start();
