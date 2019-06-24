@@ -1,7 +1,7 @@
 # linux_speedtweaks
 make linux faster, at expense of crash reliability &amp; security
 
-disables aslr, kaslr, page table isolation, and for filesystems ext2/3/4 and btrfs, it adds stuff like nobarrier,relatime,data=writeback,journal_async_commit,compress=lzo,nodatasum
+disables aslr, kaslr, page table isolation, cpu vulnerability mitigations (SPECTRE, Meltdown, l1tf, etcetc) and for filesystems ext2/3/4 and btrfs, it adds stuff like nobarrier,relatime,data=writeback,journal_async_commit,compress=lzo,nodatasum
 
 and installs libeatmydata in /etc/ld.so.preload (provided multiarch is not enabled)
 
