@@ -545,5 +545,5 @@ function trimlines(array $lines): array
 */
 function msleep(float $time)
 {
-    usleep($time * 1000000);
+    usleep((int)($time * 1000000));
 }
