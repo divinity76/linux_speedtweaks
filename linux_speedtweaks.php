@@ -430,6 +430,7 @@ class linux_speedtweaks
 				echo "warning, could not mount filesystem at all (even with no special options)\n";
 				rmdir($tmpdiskname);
 			} else {
+				msleep(0.1);
 				passthru("umount " . escapeshellarg(realpath($tmpdiskname)), $ret);
 				assert($ret === 0);
 				$cmd = implode(" ", array(
@@ -441,6 +442,7 @@ class linux_speedtweaks
 				passthru($cmd, $ret);
 				if ($ret === 0) {
 					$ret = true; // final
+					msleep(0.1);
 					passthru("umount " . escapeshellarg(realpath($tmpdiskname)), $ret2);
 					assert($ret2 === 0);
 				} else {
@@ -533,4 +535,15 @@ function trimlines(array $lines): array
 		$line = trim($line);
 	}
 	return $lines;
+}
+/**
+* Delays execution of the script by the given time.
+* @param mixed $time Time to pause script execution. Can be expressed
+* as an integer or a decimal.
+* @example msleep(1.5); // delay for 1.5 seconds
+* @example msleep(.1); // delay for 100 milliseconds
+*/
+function msleep(float $time)
+{
+    usleep($time * 1000000);
 }
