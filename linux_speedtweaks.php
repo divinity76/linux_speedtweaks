@@ -513,11 +513,9 @@ function xhhb_assert_handler($file, $line, $code, $desc = null)
 function init()
 {
 	error_reporting(E_ALL);
-	ini_set('auto_detect_line_endings', '1');
 	set_error_handler("xhhb_exception_error_handler");
 	assert_options(ASSERT_ACTIVE, 1);
 	assert_options(ASSERT_WARNING, 0);
-	assert_options(ASSERT_QUIET_EVAL, 1);
 	assert_options(ASSERT_CALLBACK, 'xhhb_assert_handler');
 }
 function findParitalStringInArray(array $arr, string $needle): bool
