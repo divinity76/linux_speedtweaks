@@ -8,3 +8,10 @@ and installs libeatmydata in /etc/ld.so.preload (provided multiarch is not enabl
 and adjust vm.dirty_{ratio|expire_centisecs} to make the filesystem utilize much more of the available ram (up to 60% of total ram) for asynchronous disk writes.
 
 if there's any more tricks you think the script should perform, or if you find any issues, please report it at https://github.com/divinity76/linux_speedtweaks/issues
+
+# usage
+
+```
+wget 'https://raw.githubusercontent.com/divinity76/linux_speedtweaks/master/linux_speedtweaks.php';
+php linux_speedtweaks.php --no-test;
+```
