@@ -505,18 +505,10 @@ function xhhb_exception_error_handler($errno, $errstr, $errfile, $errline)
 	}
 	throw new ErrorException($errstr, 0, $errno, $errfile, $errline);
 }
-function xhhb_assert_handler($file, $line, $code, $desc = null)
-{
-	$errstr = 'Assertion failed at ' . $file . ':' . $line . ' ' . $desc . ' code: ' . $code;
-	throw new ErrorException($errstr, 0, 1, $file, $line);
-}
 function init()
 {
 	error_reporting(E_ALL);
 	set_error_handler("xhhb_exception_error_handler");
-	assert_options(ASSERT_ACTIVE, 1);
-	assert_options(ASSERT_WARNING, 0);
-	assert_options(ASSERT_CALLBACK, 'xhhb_assert_handler');
 }
 function findParitalStringInArray(array $arr, string $needle): bool
 {
