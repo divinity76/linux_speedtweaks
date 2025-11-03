@@ -29,7 +29,7 @@ class linux_speedtweaks
 	public function misc_kernel_options()
 	{
 		//cba coming up with the names for all this stuff
-		$this->add_kernel_boot_parameter("noretpotline");
+		$this->add_kernel_boot_parameter("noretpoline");
 		$this->add_kernel_boot_parameter("noibrs"); // no restricted indirect branch speculation
 		$this->add_kernel_boot_parameter("noibpb"); // no indirect branch prediction barrier
 		$this->add_kernel_boot_parameter("nospectre_v2");
